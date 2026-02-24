@@ -3,8 +3,9 @@ optimize_agent0.py
 ------------------
 DSPy optimization script for Agent 0 (Context Retriever).
 
-Reads the 10 labeled Q/A pairs from Query_training_set.py, compiles Agent 0
-using BootstrapFewShotWithRandomSearch, and saves the result to compiled_agent0.json.
+Reads the 10 labeled Q/A pairs from Query_training_set_agent0.py, compiles Agent 0
+using MIPROv2, which optimizes BOTH the instruction text (R, O, D, S) AND the
+few-shot demonstrations (E) of the RODES system prompt.
 
 Usage:
     export GOOGLE_API_KEY="your_key_here"   # or set in .env
@@ -18,7 +19,7 @@ import json
 import os
 
 import dspy
-from dspy.teleprompt import BootstrapFewShotWithRandomSearch
+from dspy.teleprompt import MIPROv2
 
 # ---------------------------------------------------------------------------
 # Optional: load .env file if present (does not fail if file is absent)
@@ -50,36 +51,46 @@ dspy.configure(lm=lm)
 # 2. SIGNATURE  (docstring = system instruction for Agent 0)
 # ---------------------------------------------------------------------------
 class Agent0Signature(dspy.Signature):
-    """You are a Senior Context Researcher and Data Forager specializing in the global EV charging infrastructure sector.
+    """
+    ROLE:
+    You are a Senior Context Researcher and Data Forager specializing in the global
+    electric vehicle (EV) infrastructure sector. Your exclusive role is to scan the web
+    and gather broad, high-quality sources of information to build a rich contextual
+    foundation for downstream analytical agents.
 
     OBJECTIVE:
     Discover and aggregate diverse data sources related to EV charging stations
     (technical documentation, industry databases, e-commerce platforms, global trade
-    fair exhibitor lists, and technical wikis). Your output supplies the background
-    knowledge that downstream agents use for precise component extraction.
+    fair exhibitor lists, and technical wikis). When provided with a query about EV
+    charging infrastructure, formulate searches to find macro-level information.
+    Your output supplies the background knowledge that other agents will later use
+    for surgical extraction.
 
-    OUTPUT FORMAT:
+    DETAILS:
+    Prioritize sources in this strict order (always return at least 2 Priority 1,
+    1 Priority 2, 1 Priority 3):
+    - Priority 1 (HIGHEST): Technical product datasheets and manuals from OEM manufacturers
+      (e.g., ABB Terra series, Siemens Sicharge, Tritium RTM). Also include relevant patents
+      from Google Patents describing mechanical assemblies of EV charging stations. 
+      These are the highest-value sources because they contain complete mechanical specifications. 
+    - Priority 2: B2B industrial catalogs and directories (e.g., ThomasNet, RS Components,
+      Misumi) listing specific mechanical components with specifications. Also include
+      exhibitor lists and product catalogs from major trade fairs (e.g., Hannover Messe,
+      Power2Drive, eMove360).
+    - Priority 3: Public databases, GitHub repositories, or Kaggle datasets containing EV
+      component data. Also include technical standards references (e.g., IEC 61851,
+      IEC 62196) and general technical explanations of charging station construction.
+    You must NOT extract specific mechanical components, nor build final supplier JSONs.
+    Your output must strictly be a structured aggregation of sources and contextual
+    explanations to enrich the system's database.
+
+    STYLE:
     Return ONLY a valid JSON object. Start directly with '{' and end with '}'.
     No markdown code fences. No preamble text. No trailing prose. Use 2-space indentation.
-
-    REQUIRED TOP-LEVEL KEYS:
-    - technical_context      : a non-empty string with concise technical background.
-    - priority_1_sources     : list of OEM datasheets, manuals, patents (HIGHEST value).
-    - priority_2_sources     : list of B2B catalogs, directories, trade fair exhibitor lists.
-    - priority_3_sources     : list of public datasets, GitHub repos, standards, wikis.
-
-    HARD CONSTRAINT:
-    len(priority_1_sources) > len(priority_2_sources) > len(priority_3_sources) >= 1
-
-    FIELD SCHEMAS:
-    priority_1_sources items  → {name, type (datasheet|manual|patent), manufacturer, relevance, search_query}
-    priority_2_sources items  → {name, type (catalog|trade_fair|directory), platform, relevance, search_query}
-    priority_3_sources items  → {name, type (dataset|standard|wiki), relevance}
-
-    PROHIBITIONS:
-    - Do NOT list specific mechanical components (that is Agent 1's job).
-    - Do NOT build supplier company JSONs (that is Agent 3's job).
-    - Do NOT include any text outside the JSON object.
+    Keys must match the field schemas exactly:
+    - priority_1_sources items → {type (Technical product datasheet|manual|patent), relevance, search_query}
+    - priority_2_sources items → {type (catalog|trade_fair|directory), platform, relevance, search_query}
+    - priority_3_sources items → {type (dataset|standard|wiki), relevance}
     """
 
     ev_research_query: str = dspy.InputField(
@@ -89,10 +100,10 @@ class Agent0Signature(dspy.Signature):
         desc=(
             "A pure JSON object (no markdown fences, no preamble) with exactly four keys: "
             "technical_context (string, ≥50 chars), "
-            "priority_1_sources (list of {name, type, manufacturer, relevance, search_query}), "
-            "priority_2_sources (list of {name, type, platform, relevance, search_query}), "
-            "priority_3_sources (list of {name, type, relevance}). "
-            "Hard rule: len(P1) > len(P2) > len(P3) >= 1."
+            "priority_1_sources (list of {type, relevance, search_query}), "
+            "priority_2_sources (list of {type, platform, relevance, search_query}), "
+            "priority_3_sources (list of {type, relevance}). "
+            "Minimum counts: at least 2 Priority 1 sources, at least 1 Priority 2, at least 1 Priority 3."
         )
     )
 
@@ -161,7 +172,7 @@ def agent0_metric(example, pred, trace=None) -> float:
     Criteria:
         1. json_response is parseable as valid JSON (after stripping fences).
         2. All four required top-level keys are present.
-        3. Priority count constraint holds: len(P1) > len(P2) > len(P3) >= 1.
+        3. Minimum source counts hold: len(P1) >= 2, len(P2) >= 1, len(P3) >= 1.
         4. technical_context is a non-empty string of at least 50 characters.
     """
     score = 0.0
@@ -189,12 +200,13 @@ def agent0_metric(example, pred, trace=None) -> float:
         return score
     score += 0.25
 
-    # --- Criterion 3: Priority count constraint ---
+    # --- Criterion 3: Minimum source counts (aligned with training data) ---
+    # Training set pattern: P1 >= 2, P2 >= 1, P3 >= 1 (no strict decreasing order)
     p1 = parsed.get("priority_1_sources", [])
     p2 = parsed.get("priority_2_sources", [])
     p3 = parsed.get("priority_3_sources", [])
     if all(isinstance(lst, list) for lst in (p1, p2, p3)):
-        if len(p1) > len(p2) > len(p3) >= 1:
+        if len(p1) >= 2 and len(p2) >= 1 and len(p3) >= 1:
             score += 0.25
 
     # --- Criterion 4: Non-trivial technical_context ---
@@ -229,22 +241,24 @@ def main() -> None:
     print(f"      Split → train: {len(train_set)}  |  val: {len(val_set)}")
 
     # Configure teleprompter
-    print("\n[2/4] Configuring BootstrapFewShotWithRandomSearch …")
-    teleprompter = BootstrapFewShotWithRandomSearch(
+    print("\n[2/4] Configuring MIPROv2 …")
+    teleprompter = MIPROv2(
         metric=agent0_metric,
-        max_bootstrapped_demos=3,    # auto-generated few-shot examples injected at runtime
-        max_labeled_demos=4,         # labeled examples drawn directly from training set
-        num_candidate_programs=10,   # random search trials over demonstration selections
-        num_threads=1,               # keep at 1 for Gemini free-tier rate limits
+        auto="light",       # light/medium/heavy — "light" suited for 10-example datasets
+        num_threads=1,      # keep at 1 for Gemini free-tier rate limits
     )
     print("      Teleprompter ready.")
 
     # Compile
+    # MIPROv2 optimizes BOTH the instruction text (R,O,D,S) and few-shot examples (E)
     print("\n[3/4] Compiling Agent 0 (this will make multiple LLM calls) …")
     compiled_agent0 = teleprompter.compile(
         Agent0(),
         trainset=train_set,
         valset=val_set,
+        max_bootstrapped_demos=3,       # few-shot examples auto-generated by bootstrapping
+        max_labeled_demos=4,            # labeled examples drawn directly from training set
+        requires_permission_to_run=False,  # skip interactive confirmation prompt
     )
     print("      Compilation complete.")
 
