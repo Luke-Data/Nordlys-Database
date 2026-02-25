@@ -217,7 +217,7 @@
   ]
 }
 },
-"Pair_05":{
+"pair_05":{
     "Query_05":"Aggregami le fonti disponibili sull'infrastruttura di ricarica per mezzi pesanti (truck, bus) e sistemi a pantografo. Mi servono documentazioni OEM, standard normativi specifici e exhibitor list di fiere dedicate.",
     "Answer_05": {
     "technical_context": "L'infrastruttura di ricarica per mezzi pesanti (Heavy-Duty Vehicles - HDV come bus e camion) richiede potenze di ricarica estreme, tipicamente comprese tra 150 kW e oltre 3 MW. Le tecnologie principali si dividono in due macro-categorie: la ricarica via cavo ad altissima potenza (guidata dal nuovo standard Megawatt Charging System - MCS, con sistemi di raffreddamento a liquido integrati) e i sistemi di connessione automatizzata come i pantografi. I pantografi si dividono in 'Pantograph Down' (OppCharge, dove il pantografo scende dall'infrastruttura al veicolo) e 'Pantograph Up' (dove il pantografo è montato sul tetto del bus e si solleva verso la cappa di ricarica). Le tolleranze meccaniche, i sistemi di sicurezza e i requisiti termici differiscono profondamente da quelli per i veicoli passeggeri.",
@@ -286,7 +286,7 @@
     ]
 }
 },
-    "Pair_06":{
+    "pair_06":{
         "Query_06": "Cercami fonti e database per studiare i sistemi di pagamento, autenticazione RFID e interfacce utente (display, HMI) integrati nelle stazioni di ricarica pubbliche. Includi specifiche OCPP e directory di fornitori.",
         "Answer_06": {
     "technical_context": "I sistemi di pagamento, autenticazione e interfaccia utente (HMI) nelle stazioni di ricarica pubbliche (EVSE) costituiscono il layer di interazione diretta con l'utente e il backend. L'autenticazione avviene tipicamente tramite lettori RFID/NFC (supportando standard come ISO/IEC 14443 e MIFARE) o tramite app via protocollo OCPP (Open Charge Point Protocol). Le interfacce HMI richiedono display industriali ad alta luminosità, touch screen capacitivi resistenti agli agenti atmosferici (IK10, IP65) e terminali di pagamento EFT-POS (spesso moduli all-in-one come Nayax o Payter). La comunicazione sicura per la fatturazione e l'autorizzazione è governata da OCPP e, sempre più, dallo standard ISO 15118 per il 'Plug & Charge'.",
@@ -335,7 +335,7 @@
     ]
 }
     },
-    "Pair_07":{
+    "pair_07":{
         "Query_07": "Costruiscimi un contesto tecnico sulle stazioni di ricarica AC Level 2 e wallbox residenziali. Servono datasheet di produttori, dataset di mercato e riferimenti normativi specifici per installazioni domestiche.",
         "Answer_07": {
     "technical_context": "Le stazioni di ricarica in corrente alternata (AC Level 2) e le wallbox residenziali erogano potenza tipicamente compresa tra 3.7 kW e 22 kW, operando in monofase (230V) o trifase (400V). In questo paradigma, la conversione da AC a DC avviene tramite l'On-Board Charger (OBC) del veicolo. I componenti hardware fondamentali di una wallbox includono il controller di ricarica (EVCC), relè/contattori, sensori di corrente per il Dynamic Load Balancing (DLB) e dispositivi di protezione differenziale (RCD Tipo A con rilevamento 6mA DC o RCD Tipo B). Le interfacce fisiche adottano lo standard Tipo 2 (IEC 62196-2 in Europa) o SAE J1772 (Nord America). Le unità avanzate integrano moduli Wi-Fi/Bluetooth, misuratori MID per la fatturazione e supporto OCPP per ecosistemi smart home e integrazione fotovoltaica.",
@@ -390,7 +390,7 @@
     ]
 }
     },
-    "Pair_08":{
+    "pair_08":{
         "Query_08":"Mappami le fonti per studiare l'elettronica di potenza nelle colonnine DC: moduli SiC, raddrizzatori, power stacking. Cercami brevetti, manuali tecnici OEM e cataloghi di fornitori di semiconduttori di potenza.",
         "Answer_08":{
     "technical_context": "L'elettronica di potenza nelle stazioni di ricarica rapida in corrente continua (DCFC) è il cuore della conversione energetica. I sistemi moderni utilizzano topologie modulari (power stacking) per aggregare moduli di potenza indipendenti da 15-50 kW, raggiungendo potenze totali di 350 kW e oltre e permettendo il Dynamic Power Allocation. La conversione avviene tipicamente in due stadi: un raddrizzatore AC/DC attivo con Power Factor Correction (PFC), come il Vienna Rectifier, seguito da un convertitore DC/DC isolato (es. Dual Active Bridge o LLC). La transizione dai tradizionali IGBT in silicio ai moduli MOSFET in Carburo di Silicio (SiC) permette frequenze di commutazione notevolmente più elevate, riducendo drasticamente le perdite di commutazione, migliorando l'efficienza termica (fino al 98%) e riducendo il volume e il peso dei componenti magnetici e dei sistemi di raffreddamento.",
@@ -452,7 +452,7 @@
     ]
 }
     },
-    "Pair_09":{
+    "pair_09":{
         "Query_09": "Ho bisogno di un dossier sulle soluzioni di cable management e cable retraction systems per stazioni di ricarica. Trovami fornitori specializzati, fiere dove espongono e documentazione tecnica.",
         "Answer_09": {
     "technical_context": "I sistemi di gestione e ritrazione dei cavi (cable management e cable retraction systems) sono componenti meccanici critici nelle stazioni di ricarica, in particolare per i sistemi DC Fast Charging (DCFC). I cavi di ricarica ad alta potenza, specialmente quelli raffreddati a liquido da 500A, sono pesanti e rigidi. I sistemi di ritrazione (basati su bilanciatori a molla, pulegge, contrappesi o bracci snodabili) servono a mantenere i cavi sollevati da terra, prevenendo danni da schiacciamento o abrasione, evitando l'eccessiva torsione (rispettando il raggio di curvatura minimo dei tubi di raffreddamento) e riducendo lo sforzo fisico richiesto all'utente. Sono essenziali anche per eliminare i rischi di inciampo (tripping hazards) e garantire la conformità alle normative sull'accessibilità (come l'ADA negli USA o l'EAA in Europa).",
@@ -498,8 +498,9 @@
             "relevance": "Portale del Dipartimento dell'Energia USA (Alternative Fuels Data Center) che fornisce best practices pubbliche e linee guida pratiche sull'installazione fisica delle stazioni di ricarica, con focus sulla prevenzione del rischio di inciampo."
         }
     ]
-}, 
-"Pair_10":{
+}
+    },
+    "pair_10":{
     "Query_10":"Aggregami fonti per analizzare i requisiti di certificazione e testing per stazioni di ricarica destinate al mercato extra-europeo (Nord America UL, Asia). Servono normative, laboratori di certificazione e guide tecniche OEM per l'omologazione.",
     "Answer_10": {
     "technical_context": "L'esportazione di stazioni di ricarica (EVSE) nei mercati extra-europei richiede il superamento di rigorosi iter di certificazione e testing. In Nord America, le apparecchiature devono essere omologate da un laboratorio riconosciuto NRTL (come UL, Intertek/ETL o CSA) in conformità agli standard UL 2202 (ricarica DC), UL 2594 (ricarica AC) e UL 2231-1/2 (protezione del personale e CCID). Per la compatibilità elettromagnetica (EMC) è obbligatoria la certificazione FCC (Part 15). Nel mercato asiatico, la Cina impone i severi standard nazionali GB/T (es. GB/T 18487 per la sicurezza hardware e GB/T 27930 per la comunicazione CAN-bus), mentre il Giappone richiede la certificazione CHAdeMO e la Corea del Sud il marchio KC. I test di omologazione includono prove di rigidità dielettrica, test ambientali (NEMA Type 3R/4 per gli USA), cicli termici e validazione dell'isolamento galvanico.",
@@ -560,6 +561,5 @@
         }
     ]
 }
-
-    }
+}
 }
