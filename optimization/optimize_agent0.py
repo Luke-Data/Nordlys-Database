@@ -17,10 +17,11 @@ Requires:
 
 import json
 import os
+import time
+from datetime import datetime
 
 import dspy
 from dspy.teleprompt import MIPROv2
-
 import litellm
 
 # ---------------------------------------------------------------------------
@@ -36,7 +37,7 @@ except ImportError:
 # 1. LM CONFIGURATION
 # ---------------------------------------------------------------------------
 
-GEMINI_MODEL = "gemini/gemini-2.0-flash-lite"  # free-tier test; switch to gemini-2.0-flash or higher for production
+GEMINI_MODEL = "gemini/gemini-2.0-flash"  # test con Groq free tier (500K TPD); per produzione usare gemini/gemini-2.0-flash
 
 api_key = os.environ.get("GOOGLE_API_KEY")
 if not api_key:
@@ -48,7 +49,8 @@ if not api_key:
 lm = dspy.LM(
     GEMINI_MODEL,
     api_key=api_key,
-    num_retries=5,
+    num_retries=10,     
+    retry_delay=15
 )
 
 dspy.configure(lm=lm)
@@ -228,12 +230,24 @@ def agent0_metric(example, pred, trace=None) -> float:
 # ---------------------------------------------------------------------------
 # 6. COMPILE AND SAVE
 # ---------------------------------------------------------------------------
-_OUTPUT_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "compiled", "compiled_agent0.json")
+#_OUTPUT_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "compiled", "compiled_agent0.json")
 
 def main() -> None:
+    # 1. Fai partire il cronometro
+    start_time = time.time()
+    
+    # 2. Crea la cartella con la data di oggi (es. "25-02-2026")
+    today_str = datetime.now().strftime("%d-%m-%Y")
+    output_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "compiled", today_str)
+    os.makedirs(output_dir, exist_ok=True)
+    
+    compiled_path = os.path.join(output_dir, "compiled_agent0.json")
+    metadata_path = os.path.join(output_dir, "metadata.json")
+
     print("=" * 60)
     print("Agent 0 — DSPy Optimization Pipeline")
     print(f"Model : {GEMINI_MODEL}")
+    print(f"Output folder: {output_dir}")
     print("=" * 60)
 
     # Load and split data
@@ -257,21 +271,21 @@ def main() -> None:
     print("      Teleprompter ready.")
 
     # Compile
-    # MIPROv2 optimizes BOTH the instruction text (R,O,D,S) and few-shot examples (E)
     print("\n[3/4] Compiling Agent 0 (this will make multiple LLM calls) …")
     compiled_agent0 = teleprompter.compile(
         Agent0(),
         trainset=train_set,
         valset=val_set,
-        max_bootstrapped_demos=3,
-        max_labeled_demos=4,
+        max_bootstrapped_demos=2,
+        max_labeled_demos=3,
     )
     print("      Compilation complete.")
 
-    # Save
-    print(f"\n[4/4] Saving compiled program → {_OUTPUT_PATH}")
-    os.makedirs(os.path.dirname(_OUTPUT_PATH), exist_ok=True)
-    compiled_agent0.save(_OUTPUT_PATH)
+    # Save & Metadata setup
+    end_time = time.time()
+    
+    print(f"\n[4/4] Saving compiled program → {compiled_path}")
+    compiled_agent0.save(compiled_path)
     print("      Saved.")
 
     # --- Quick inference smoke test ---
@@ -290,11 +304,28 @@ def main() -> None:
     print(f"\nMetric score: {score:.2f} / 1.00")
     print("=" * 60)
 
+    # Crea e salva il file metadata.json
+    metadata = {
+        "execution_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "running_time_minutes": round((end_time - start_time) / 60, 2),
+        "model_used": GEMINI_MODEL,
+        "final_metric_score": score,
+        "optimization_specs": {
+            "optimizer": "MIPROv2",
+            "auto_mode": "light",
+            "num_threads": 1,
+            "max_bootstrapped_demos": 2,
+            "max_labeled_demos": 3
+        }
+    }
+    with open(metadata_path, "w", encoding="utf-8") as f:
+        json.dump(metadata, f, indent=4)
+    print(f"[OK] Metadata saved in: {metadata_path}")
+
     if score < 0.75:
         print("[WARN] Score below 0.75 — consider increasing num_candidate_programs or expanding the training set.")
     else:
         print("[OK] Agent 0 compiled and validated successfully.")
-
 
 if __name__ == "__main__":
     main()
