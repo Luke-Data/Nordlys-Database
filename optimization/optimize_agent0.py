@@ -37,7 +37,7 @@ except ImportError:
 # 1. LM CONFIGURATION
 # ---------------------------------------------------------------------------
 
-GEMINI_MODEL = "gemini/gemini-2.0-flash"  # test con Groq free tier (500K TPD); per produzione usare gemini/gemini-2.0-flash
+GEMINI_MODEL = "gemini/gemini-2.5-flash"  
 
 api_key = os.environ.get("GOOGLE_API_KEY")
 if not api_key:
@@ -50,7 +50,7 @@ lm = dspy.LM(
     GEMINI_MODEL,
     api_key=api_key,
     num_retries=10,     
-    retry_delay=15
+#    retry_delay=15
 )
 
 dspy.configure(lm=lm)
@@ -118,6 +118,13 @@ class Agent0Signature(dspy.Signature):
         )
     )
 
+# Signature usata esclusivamente in fase di ottimizzazione -> punteggio da 1 a 10 sulla coerenza
+
+class AssessSourceQuality(dspy.Signature): # (user query + extracted_sources -> score in output)
+    """Valuta da 1 a 10 quanto le fonti estratte sono pertinenti alla query originale dell'utente."""
+    user_query = dspy.InputField()
+    extracted_sources = dspy.InputField()
+    score = dspy.OutputField(desc="Un numero intero da 1 a 10.")
 
 # ---------------------------------------------------------------------------
 # 3. MODULE
@@ -129,7 +136,6 @@ class Agent0(dspy.Module):
 
     def forward(self, ev_research_query: str):
         return self.predict(ev_research_query=ev_research_query)
-
 
 # ---------------------------------------------------------------------------
 # 4. TRAINING DATA LOADER
@@ -173,18 +179,21 @@ def load_training_examples() -> list[dspy.Example]:
 
     return examples
 
-
 # ---------------------------------------------------------------------------
 # 5. QUALITY METRIC  (returns float in [0.0, 1.0])
 # ---------------------------------------------------------------------------
 def agent0_metric(example, pred, trace=None) -> float:
-    """Score a prediction on four independent criteria worth 0.25 each.
 
-    Criteria:
-        1. json_response is parseable as valid JSON (after stripping fences).
-        2. All four required top-level keys are present.
-        3. Minimum source counts hold: len(P1) >= 2, len(P2) >= 1, len(P3) >= 1.
-        4. technical_context is a non-empty string of at least 50 characters.
+    """Score a prediction on 6 independent criteria (total = 1.0).
+
+    Criteria and weights:
+        1. json_response is parseable as valid JSON (after stripping fences).  [0.10]
+        2. All four required top-level keys are present.                        [0.15]
+        3. Minimum source counts: len(P1) >= 2, len(P2) >= 1, len(P3) >= 1.   [0.20]
+        4. technical_context is a non-empty string of at least 50 characters.  [0.15]
+        5. Keyword match: >= 30% of query keywords appear in search_query.      [0.15]
+        6. LLM judge scores source relevance 1-10 (weighted 0.25).             [0.25]
+    Note: criteria 5 and 6 are skipped (score=0) when example is None.
     """
     score = 0.0
 
@@ -201,7 +210,7 @@ def agent0_metric(example, pred, trace=None) -> float:
     parsed = None
     try:
         parsed = json.loads(cleaned)
-        score += 0.25
+        score += 0.1
     except (json.JSONDecodeError, ValueError):
         return score  # Cannot evaluate further without a valid object
 
@@ -209,7 +218,7 @@ def agent0_metric(example, pred, trace=None) -> float:
     required = {"technical_context", "priority_1_sources", "priority_2_sources", "priority_3_sources"}
     if not required.issubset(parsed.keys()):
         return score
-    score += 0.25
+    score += 0.15
 
     # --- Criterion 3: Minimum source counts (aligned with training data) ---
     # Training set pattern: P1 >= 2, P2 >= 1, P3 >= 1 (no strict decreasing order)
@@ -218,12 +227,43 @@ def agent0_metric(example, pred, trace=None) -> float:
     p3 = parsed.get("priority_3_sources", [])
     if all(isinstance(lst, list) for lst in (p1, p2, p3)):
         if len(p1) >= 2 and len(p2) >= 1 and len(p3) >= 1:
-            score += 0.25
+            score += 0.2
 
     # --- Criterion 4: Non-trivial technical_context ---
     tc = parsed.get("technical_context", "")
     if isinstance(tc, str) and len(tc.strip()) >= 50:
-        score += 0.25
+        score += 0.15
+
+    # --- Criterion 5: Key word in search query ---
+    original_query = getattr(example, "ev_research_query", "").lower() # -> Identico a get per diz()
+
+    generated_queries = ""
+    for source in p1 + p2: # p3 non genera search query
+        if isinstance(source, dict):
+            generated_queries += source.get("search_query", "").lower() + " "
+    
+    keywords = [word for word in original_query.replace(".", " ").replace(",", " ").split() if len(word) > 4]
+    
+    if keywords:
+        matches = sum(1 for kw in keywords if kw in generated_queries)
+        match_ratio = matches / len(keywords)
+        if match_ratio >= 0.30:  # Soglia di tolleranza (personalizzabile)
+            score += 0.15
+    
+    # --- Criterion 6: context ---
+    user_query_str = getattr(example, "ev_research_query", None) if example is not None else None
+    if user_query_str:
+        judge = dspy.Predict(AssessSourceQuality)
+        judge_result = judge(
+            user_query=user_query_str,
+            extracted_sources=pred.json_response
+        )
+        try:
+            voto = float(judge_result.score)
+            bonus = voto / 10.0
+            score += (bonus * 0.25)
+        except ValueError:
+            pass
 
     return score
 
@@ -265,8 +305,8 @@ def main() -> None:
     print("\n[2/4] Configuring MIPROv2 …")
     teleprompter = MIPROv2(
         metric=agent0_metric,
-        auto="light",
-        num_threads=1,
+        auto="medium",
+        num_threads=20,
     )
     print("      Teleprompter ready.")
 
@@ -276,8 +316,8 @@ def main() -> None:
         Agent0(),
         trainset=train_set,
         valset=val_set,
-        max_bootstrapped_demos=2,
-        max_labeled_demos=3,
+        max_bootstrapped_demos=3,
+        max_labeled_demos=4,
     )
     print("      Compilation complete.")
 
@@ -312,18 +352,19 @@ def main() -> None:
         "final_metric_score": score,
         "optimization_specs": {
             "optimizer": "MIPROv2",
-            "auto_mode": "light",
-            "num_threads": 1,
-            "max_bootstrapped_demos": 2,
-            "max_labeled_demos": 3
+            "auto_mode": "medium",
+            "num_threads": 20,
+            "max_bootstrapped_demos": 3,
+            "max_labeled_demos": 4
         }
     }
     with open(metadata_path, "w", encoding="utf-8") as f:
         json.dump(metadata, f, indent=4)
     print(f"[OK] Metadata saved in: {metadata_path}")
 
-    if score < 0.75:
-        print("[WARN] Score below 0.75 — consider increasing num_candidate_programs or expanding the training set.")
+    # Max score when example=None (smoke test): 0.60 (C5 and C6 skipped)
+    if score < 0.45:
+        print("[WARN] Score below 0.45 — consider increasing num_candidate_programs or expanding the training set.")
     else:
         print("[OK] Agent 0 compiled and validated successfully.")
 
